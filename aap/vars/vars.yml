@@ -1,0 +1,47 @@
+---
+
+controller_validate_certs: false
+
+rhtas_aap_organization_name: RHTAS
+rhtas_aap_organization_description: Red Hat Trusted Artifact Signer
+rhtas_aap_organization_create: true
+
+rhtas_aap_inventory_name: RHTAS
+rhtas_aap_inventory_description: Red Hat Trusted Artifact Signer
+
+rhtas_aap_group_name: rhtas
+
+rhtas_aap_project_name: RHTAS
+rhtas_aap_project_description: Red Hat Trusted Artifact Signer
+rhtas_aap_project_scm_url: https://github.com/securesign/artifact-signer-ansible
+rhtas_aap_project_scm_branch: main
+
+rhtas_aap_credential_machine_name: RHTAS Node
+rhtas_aap_credential_machine_description: SSH Credentials to connect to RHTAS Instances
+rhtas_aap_credential_machine_username: ""
+rhtas_aap_credential_machine_ssh_key_file: ""
+rhtas_aap_credential_machine_ssh_key_passphrase: ""
+
+rhtas_aap_execution_environment_name: "RHTAS"
+rhtas_aap_execution_environment_image: ""
+rhtas_aap_execution_environment_create: true
+
+rhtas_aap_credential_type_name: RHTAS Red Hat Container Registry
+rhtas_aap_credential_type_description: Credentials to authenticate RHTAS to the Red Hat Container Registry
+
+rhtas_aap_execution_environment_credential_name: RHTAS Execution Environment
+rhtas_aap_execution_environment_credential_description: "Credential for the RHTAS Execution Environment"
+rhtas_aap_execution_environment_credential_host: ""
+rhtas_aap_execution_environment_credential_username: ""
+rhtas_aap_execution_environment_credential_password: ""
+rhtas_aap_execution_environment_credential_create: false
+
+rhtas_aap_job_template_name: Provision RHTAS
+rhtas_aap_job_template_extra_vars: {}
+rhtas_aap_job_template_playbook: "aap/deploy_rhtas.yml"
+
+tas_single_node_registry_username: ""
+tas_single_node_registry_password: ""
+
+tas_single_node_host: ""
+...

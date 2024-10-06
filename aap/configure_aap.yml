@@ -1,0 +1,195 @@
+---
+
+- name: Configure Ansible Automation Platform
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars/vars.yml
+  tasks:
+    - name: Ensure AAP Connection Properites have been set
+      ansible.builtin.assert:
+        that:
+          - controller_hostname | default('', True) | trim | length > 0
+          - controller_username | default('', True) | trim | length > 0
+          - controller_password | default('', True) | trim | length > 0
+        fail_msg: "'controller_hostname', 'controller_username' and 'controller_password' must be provided"
+        quiet: true
+
+    - name: Ensure Red Hat Container Registry credentials provided
+      ansible.builtin.assert:
+        that:
+          - tas_single_node_registry_username | default('', True) | trim | length > 0
+          - tas_single_node_registry_password | default('', True) | trim | length > 0
+        fail_msg: "'tas_single_node_registry_username' and 'tas_single_node_registry_password' must be provided"
+        quiet: true
+
+    - name: Ensure RHTAS Host provided
+      ansible.builtin.assert:
+        that:
+          - tas_single_node_host | default('', True) | trim | length > 0
+        fail_msg: "'tas_single_node_host' must be provided"
+        quiet: true
+
+    - name: Ensure RHTAS Machine SSH Key File Provided
+      ansible.builtin.assert:
+        that:
+          - rhtas_aap_credential_machine_ssh_key_file | default('', True) | trim | length > 0
+        fail_msg: "'rhtas_aap_credential_machine_ssh_key_file' must be provided"
+        quiet: true
+
+    - name: Ensure RHTAS Execution Environment Image Specified
+      ansible.builtin.assert:
+        that:
+          - rhtas_aap_execution_environment_image | default('', True) | trim | length > 0
+        fail_msg: "'rhtas_aap_execution_environment_image' must be provided"
+        quiet: true
+      when: rhtas_aap_execution_environment_create | bool
+
+    - name: Set Credential Types Facts
+      ansible.builtin.set_fact:
+        controller_credential_types:
+          - name: "{{ rhtas_aap_credential_type_name }}"
+            description: "{{ rhtas_aap_credential_type_description }}"
+            organization: "{{ rhtas_aap_organization_name }}"
+            kind: cloud
+            inputs:
+              fields:
+                - id: tas_single_node_registry_username
+                  type: string
+                  label: Username
+                - id: tas_single_node_registry_password
+                  type: string
+                  label: Password
+                  secret: true
+              required:
+                - tas_single_node_registry_username
+                - tas_single_node_registry_password
+            injectors:
+              extra_vars:
+                tas_single_node_registry_username: "{% raw %}{  { tas_single_node_registry_username }}{% endraw %}"
+                tas_single_node_registry_password: "{% raw %}{  { tas_single_node_registry_password }}{% endraw %}"
+              env:
+                TAS_SINGLE_NODE_REGISTRY_USERNAME: "{% raw %}{  { tas_single_node_registry_username }}{% endraw %}"
+                TAS_SINGLE_NODE_REGISTRY_PASSWORD: "{% raw %}{  { tas_single_node_registry_password }}{% endraw %}"
+
+    - name: Set Organization Facts
+      ansible.builtin.set_fact:
+        controller_organizations:
+          - name: "{{ rhtas_aap_organization_name }}"
+            description: "{{ rhtas_aap_organization_description }}"
+            galaxy_credentials:
+              - Ansible Galaxy
+      when: rhtas_aap_organization_create | default(true) | bool
+
+    - name: Create RHTAS Inventory
+      ansible.builtin.set_fact:
+        controller_inventories:
+          - name: "{{ rhtas_aap_inventory_name }}"
+            description: "{{ rhtas_aap_inventory_description }}"
+            organization: "{{ rhtas_aap_organization_name }}"
+
+    - name: Create RHTAS Hosts
+      ansible.builtin.set_fact:
+        controller_hosts:
+          - name: localhost
+            inventory: "{{ rhtas_aap_inventory_name }}"
+          - name: "{{ tas_single_node_host }}"
+            inventory: "{{ rhtas_aap_inventory_name }}"
+            enabled: true
+
+    - name: Create RHTAS Group
+      ansible.builtin.set_fact:
+        controller_groups:
+          - name: "{{ rhtas_aap_group_name }}"
+            inventory: "{{ rhtas_aap_inventory_name }}"
+            hosts:
+              - "{{ tas_single_node_host }}"
+
+    - name: Create RHTAS Registry Credential
+      ansible.builtin.set_fact:
+        controller_credentials: "{{ controller_credentials | default([]) + [ rhtas_registry_credential ] }}"
+      vars:
+        rhtas_registry_credential:
+          name: "{{ rhtas_aap_credential_type_name }}"
+          description: "{{ rhtas_aap_credential_machine_description }}"
+          credential_type: "{{ rhtas_aap_credential_type_name }}"
+          organization: "{{ rhtas_aap_organization_name }}"
+          inputs:
+            tas_single_node_registry_username: "{{ tas_single_node_registry_username }}"
+            tas_single_node_registry_password: "{{ tas_single_node_registry_password }}"
+
+    - name: Create RHTAS Machine Credential
+      ansible.builtin.set_fact:
+        controller_credentials: "{{ controller_credentials | default([]) + [ rhtas_machine_credential ] }}"
+      vars:
+        rhtas_machine_credential:
+          name: "{{ rhtas_aap_credential_machine_name }}"
+          description: "{{ rhtas_aap_credential_machine_description }}"
+          credential_type: "Machine"
+          organization: "{{ rhtas_aap_organization_name }}"
+          inputs:
+            username: "{{ rhtas_aap_credential_machine_username | default('root', True) }}"
+            ssh_key_data: "{{ lookup('file', rhtas_aap_credential_machine_ssh_key_file) }}"
+            ssh_key_unlock: "{{ migration_factory_git_ssh_key_passphrase | default(omit, True) }}"
+
+    - name: Create Execution Environment Credential
+      ansible.builtin.set_fact:
+        controller_credentials: "{{ controller_credentials | default([]) + [ rhtas_execution_environment_credential ] }}"
+      vars:
+        rhtas_execution_environment_credential:
+          name: "{{ rhtas_aap_execution_environment_credential_name }}"
+          description: "{{ rhtas_aap_execution_environment_credential_description }}"
+          organization: "{{ rhtas_aap_organization_name }}"
+          credential_type: Container Registry
+          inputs:
+            host: "{{ rhtas_aap_execution_environment_credential_host }}"
+            password: "{{ rhtas_aap_execution_environment_credential_password }}"
+            username: "{{ rhtas_aap_execution_environment_credential_username }}"
+            verify_ssl: "{{ rhtas_aap_execution_environment_credential_verify_ssl | default(false) }}"
+      when:
+        - rhtas_aap_execution_environment_credential_host is defined
+        - rhtas_aap_execution_environment_credential_password is defined
+        - rhtas_aap_execution_environment_credential_username is defined
+        - rhtas_aap_execution_environment_credential_create | bool
+
+    - name: Create RHTAS Execution Environment
+      ansible.builtin.set_fact:
+        controller_execution_environments:
+          - name: "{{ rhtas_aap_execution_environment_name }}"
+            image: "{{ rhtas_aap_execution_environment_image }}"
+            pull: always
+            credential: "{{ rhtas_aap_execution_environment_credential_name if rhtas_aap_execution_environment_credential_create | bool else omit }}"
+      when: rhtas_aap_execution_environment_create | bool
+
+    - name: Create RHTAS Project
+      ansible.builtin.set_fact:
+        controller_projects:
+          - name: "{{ rhtas_aap_project_name }}"
+            scm_type: git
+            scm_url: "{{ rhtas_aap_project_scm_url }}"
+            scm_branch: "{{ rhtas_aap_project_scm_branch }}"
+            scm_clean: true
+            description: "{{ rhtas_aap_project_description }}"
+            organization: "{{ rhtas_aap_organization_name }}"
+
+    - name: Create RHTAS Job Template
+      ansible.builtin.set_fact:
+        controller_templates:
+          - name: "{{ rhtas_aap_job_template_name }}"
+            organization: "{{ rhtas_aap_organization_name }}"
+            project: "{{ rhtas_aap_project_name }}"
+            job_type: run
+            extra_vars: "{{ rhtas_aap_job_template_extra_vars }}"
+            playbook: "{{ rhtas_aap_job_template_playbook }}"
+            ask_variables_on_launch: true
+            inventory: "{{ rhtas_aap_inventory_name }}"
+            execution_environment: "{{ rhtas_aap_execution_environment_name if rhtas_aap_execution_environment_create | bool else omit }}"
+            credentials:
+              - "{{ rhtas_aap_credential_machine_name }}"
+              - "{{ rhtas_aap_credential_type_name }}"
+
+    - name: Call Controller Configuration
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.dispatch
+
+...
